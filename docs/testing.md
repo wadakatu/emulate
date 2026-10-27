@@ -114,11 +114,13 @@ except Exception as e:
 ```php
 use WorkOS\WorkOS;
 
-$workos = new WorkOS('sk_test_default');
-$workos->setApiBaseUrl('http://localhost:4100'); // ← emulator
+$workos = new WorkOS(
+    apiKey: 'sk_test_default',
+    baseUrl: 'http://localhost:4100', // ← emulator
+);
 
 // Use the SDK as normal
-$user = $workos->userManagement->createUser(['email' => 'alice@example.com']);
+$user = $workos->userManagement()->createUser(email: 'alice@example.com');
 
 // Add an error hook at runtime
 $ch = curl_init('http://localhost:4100/_emulate/hooks');
@@ -137,7 +139,7 @@ curl_close($ch);
 
 // Now user creation returns a 500 — test your error handling
 try {
-    $workos->userManagement->createUser(['email' => 'bob@example.com']);
+    $workos->userManagement()->createUser(email: 'bob@example.com');
 } catch (\Exception $e) {
     echo "Handled error: " . $e->getMessage();
 }
