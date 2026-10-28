@@ -46,7 +46,7 @@ permissions:
     resource_type_slug: document # optional; defaults to organization
 ```
 
-## Pinning organization, user and membership ids
+## Pinning organization, user, and membership ids
 
 `organizations`, `users` and an organization's `memberships` accept an optional `id`. Pin it to
 match what your real WorkOS environment emits, so a backend whose database already references a
