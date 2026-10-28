@@ -283,6 +283,16 @@ export function validateSeedConfig(config: WorkOSSeedConfig): ConfigValidationRe
                   value: membership.email,
                 });
               }
+              if (
+                membership.id !== undefined &&
+                (typeof membership.id !== 'string' || !PINNED_ID_PATTERN.test(membership.id))
+              ) {
+                errors.push({
+                  path: `organizations[${index}].memberships[${mIndex}].id`,
+                  message: 'id must be a non-empty, URL-safe string (letters, digits, "_" or "-") if provided',
+                  value: membership.id,
+                });
+              }
               if (membership.status && !['active', 'inactive', 'pending'].includes(membership.status)) {
                 errors.push({
                   path: `organizations[${index}].memberships[${mIndex}].status`,
@@ -438,6 +448,24 @@ export function validateSeedConfig(config: WorkOSSeedConfig): ConfigValidationRe
           });
         }
         seenOrgIds.add(org.id);
+      });
+
+      // Memberships of every organization share one store collection, so a pinned
+      // membership id must be unique across organizations, not just within one.
+      const seenMembershipIds = new Set<string>();
+      config.organizations.forEach((org, index) => {
+        if (!Array.isArray(org.memberships)) return;
+        org.memberships.forEach((membership, mIndex) => {
+          if (typeof membership.id !== 'string' || membership.id.length === 0) return;
+          if (seenMembershipIds.has(membership.id)) {
+            errors.push({
+              path: `organizations[${index}].memberships[${mIndex}].id`,
+              message: 'id must be unique across the memberships of all organizations',
+              value: membership.id,
+            });
+          }
+          seenMembershipIds.add(membership.id);
+        });
       });
     }
   }

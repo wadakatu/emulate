@@ -46,17 +46,22 @@ permissions:
     resource_type_slug: document # optional; defaults to organization
 ```
 
-## Pinning organization and user ids
+## Pinning organization, user and membership ids
 
-Both `organizations` and `users` accept an optional `id`. Pin it to match what your real
-WorkOS environment emits, so a backend whose database already references a real org or user id
-lines up with the emulator — and stays stable across restarts, which otherwise mint a fresh id
-each time the seed re-runs. Omit it and an id is generated as before.
+`organizations`, `users` and an organization's `memberships` accept an optional `id`. Pin it to
+match what your real WorkOS environment emits, so a backend whose database already references a
+real org, user or membership id lines up with the emulator — and stays stable across restarts,
+which otherwise mint a fresh id each time the seed re-runs. Omit it and an id is generated as
+before. Pin a membership id when your backend stores it and later changes the role or removes the
+member by it; a restart would otherwise leave the stored id pointing at nothing.
 
 ```yaml
 organizations:
   - id: org_01ABC... # optional; generated if omitted
     name: Acme Corp
+    memberships:
+      - id: om_01DEF... # optional; generated if omitted
+        email: alice@acme.com
 
 users:
   - id: user_01XYZ... # optional; generated if omitted
@@ -64,9 +69,10 @@ users:
     password: test123
 ```
 
-A pinned id must be a non-empty string, and ids must be unique within `organizations` and
-within `users` (a duplicate would silently overwrite the earlier record in the store). The
-pinned id is what the API, login tokens, and webhooks report for that resource.
+A pinned id must be a non-empty string, and ids must be unique within `organizations`, within
+`users`, and across the memberships of all organizations (a duplicate would silently overwrite
+the earlier record in the store). The pinned id is what the API, login tokens, and webhooks
+report for that resource.
 
 For OAuth-based logins (`authorization_code`, `refresh_token`, `device_code`), the authenticate
 response omits `authentication_method` by default: the hosted authorize flow carries no provider

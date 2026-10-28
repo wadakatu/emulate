@@ -1,9 +1,10 @@
 /**
- * Pinning organization and user ids in a seed file. WorkOS ids are foreign keys that
- * live in an application's database, so a seed must be able to declare the id a backend
- * already references — otherwise a fresh, generated id never matches the copied data and
- * the restart-minted id churns duplicate rows. These tests prove a pinned id is what the
- * API returns, what a login token carries, and what a webhook delivers.
+ * Pinning organization, user and membership ids in a seed file. WorkOS ids are foreign
+ * keys that live in an application's database, so a seed must be able to declare the id a
+ * backend already references — otherwise a fresh, generated id never matches the copied data
+ * and the restart-minted id churns duplicate rows. These tests prove a pinned id is what the
+ * API returns, what a login token carries, and what a webhook delivers, and that a stored
+ * membership id still addresses the membership.
  */
 import { describe, it, expect, afterEach } from 'bun:test';
 import { createServer, type Server } from 'node:http';
@@ -12,6 +13,7 @@ import { validateSeedConfig } from './config-validator.js';
 
 const PINNED_ORG_ID = 'org_01ABCDEFGHIJKLMNOPQRSTUVWX';
 const PINNED_USER_ID = 'user_01ABCDEFGHIJKLMNOPQRSTUVWX';
+const PINNED_MEMBERSHIP_ID = 'om_01ABCDEFGHIJKLMNOPQRSTUVWX';
 
 interface ReceivedWebhook {
   event: string;
@@ -69,7 +71,7 @@ async function waitForWebhooks(
   }
 }
 
-describe('Seeding pinned organization and user ids', () => {
+describe('Seeding pinned organization, user and membership ids', () => {
   let emulator: Emulator | undefined;
   let receiver: WebhookReceiver | undefined;
 
@@ -150,6 +152,47 @@ describe('Seeding pinned organization and user ids', () => {
     const scoped = (await orgRes.json()) as any;
     expect(scoped.organization_id).toBe(PINNED_ORG_ID);
     expect(decodeJwt(scoped.access_token).org_id).toBe(PINNED_ORG_ID);
+  });
+
+  it('addresses a seeded membership by its pinned id', async () => {
+    emulator = await createEmulator({
+      port: 0,
+      seed: {
+        users: [{ id: PINNED_USER_ID, email: 'operator@acme.com' }],
+        organizations: [
+          {
+            id: PINNED_ORG_ID,
+            name: 'Preview Org',
+            memberships: [{ id: PINNED_MEMBERSHIP_ID, email: 'operator@acme.com', role: 'member' }],
+          },
+        ],
+        roles: [{ slug: 'admin', name: 'Admin' }],
+      },
+    });
+    const memberships = `${emulator.url}/user_management/organization_memberships`;
+
+    // A backend reads the membership id from the list and stores it ...
+    const listRes = await fetch(`${memberships}?user_id=${PINNED_USER_ID}`, { headers: auth(emulator.apiKey) });
+    expect(listRes.status).toBe(200);
+    const list = (await listRes.json()) as any;
+    expect(list.data.map((m: any) => m.id)).toEqual([PINNED_MEMBERSHIP_ID]);
+
+    // ... and later changes the role and removes the member by that stored id.
+    const updateRes = await fetch(`${memberships}/${PINNED_MEMBERSHIP_ID}`, {
+      method: 'PUT',
+      headers: auth(emulator.apiKey),
+      body: JSON.stringify({ role_slug: 'admin' }),
+    });
+    expect(updateRes.status).toBe(200);
+    const updated = (await updateRes.json()) as any;
+    expect(updated.id).toBe(PINNED_MEMBERSHIP_ID);
+    expect(updated.role.slug).toBe('admin');
+
+    const deleteRes = await fetch(`${memberships}/${PINNED_MEMBERSHIP_ID}`, {
+      method: 'DELETE',
+      headers: auth(emulator.apiKey),
+    });
+    expect(deleteRes.status).toBe(204);
   });
 
   it('delivers the pinned ids in webhooks', async () => {
@@ -241,10 +284,41 @@ describe('Seeding pinned organization and user ids', () => {
       expect(userErr.message).toContain('URL-safe');
     });
 
-    it('accepts distinct pinned ids on organizations and users', () => {
+    it('rejects two memberships sharing a pinned id, even across organizations', () => {
+      const error = findError(
+        {
+          users: [{ email: 'a@acme.com' }],
+          organizations: [
+            { name: 'Org A', memberships: [{ id: PINNED_MEMBERSHIP_ID, email: 'a@acme.com' }] },
+            { name: 'Org B', memberships: [{ id: PINNED_MEMBERSHIP_ID, email: 'a@acme.com' }] },
+          ],
+        },
+        'organizations[1].memberships[0].id',
+      );
+      expect(error.message).toContain('unique');
+    });
+
+    it('rejects a membership id with a path delimiter', () => {
+      const error = findError(
+        {
+          users: [{ email: 'a@acme.com' }],
+          organizations: [{ name: 'Org A', memberships: [{ id: 'om/custom', email: 'a@acme.com' }] }],
+        },
+        'organizations[0].memberships[0].id',
+      );
+      expect(error.message).toContain('URL-safe');
+    });
+
+    it('accepts distinct pinned ids on organizations, users and memberships', () => {
       const result = validateSeedConfig({
         users: [{ id: PINNED_USER_ID, email: 'operator@acme.com' }],
-        organizations: [{ id: PINNED_ORG_ID, name: 'Preview Org' }],
+        organizations: [
+          {
+            id: PINNED_ORG_ID,
+            name: 'Preview Org',
+            memberships: [{ id: PINNED_MEMBERSHIP_ID, email: 'operator@acme.com' }],
+          },
+        ],
       });
       expect(result.errors).toEqual([]);
       expect(result.valid).toBe(true);

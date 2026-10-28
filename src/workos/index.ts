@@ -132,6 +132,12 @@ export interface WorkOSSeedOrganization {
   entitlements?: string[];
   memberships?: Array<{
     /**
+     * Pinned membership id (e.g. `om_01ABC…`). Generated if omitted. Pin it when a backend
+     * stores the membership id and later addresses the membership by it (role changes,
+     * removal), so the stored id still resolves after an emulator restart.
+     */
+    id?: string;
+    /**
      * Email of a user defined in `users`. Seeded user ids are generated at startup,
      * so memberships are joined by email — an id literal could never resolve.
      */
@@ -687,6 +693,7 @@ export function seedFromConfig(store: Store, _baseUrl: string, config: WorkOSSee
           }
           ws.organizationMemberships.insert({
             object: 'organization_membership',
+            id: mm.id,
             organization_id: org.id,
             user_id: memberUser.id,
             ...membershipRoleFields(ws, org.id, mm.roles ?? [mm.role ?? 'member']),
